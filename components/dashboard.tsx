@@ -26,50 +26,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 
-const quickAccessResources = [
-  'Pod', 'Deployment', 'Service', 'ConfigMap', 'Secret', 'Ingress', 
-  'Namespace', 'PersistentVolumeClaim', 'HorizontalPodAutoscaler', 'CronJob'
-]
-
-const apiGroups = {
-  'Core (v1)': [
-    'Pod', 'Service', 'ReplicationController', 'Namespace', 'Node', 'PersistentVolume',
-    'PersistentVolumeClaim', 'ConfigMap', 'Secret', 'ServiceAccount', 'LimitRange',
-    'ResourceQuota', 'Endpoints'
-  ],
-  'Apps (apps/v1)': ['Deployment', 'StatefulSet', 'DaemonSet', 'ReplicaSet'],
-  'Batch (batch/v1)': ['Job', 'CronJob'],
-  'Autoscaling (autoscaling/v1)': ['HorizontalPodAutoscaler'],
-  'Networking (networking.k8s.io/v1)': ['Ingress', 'NetworkPolicy'],
-  'Policy (policy/v1)': ['PodDisruptionBudget'],
-  'Storage (storage.k8s.io/v1)': ['StorageClass', 'VolumeAttachment', 'CSIDriver', 'CSINode'],
-  'RBAC (rbac.authorization.k8s.io/v1)': ['Role', 'RoleBinding', 'ClusterRole', 'ClusterRoleBinding'],
-  'Scheduling (scheduling.k8s.io/v1)': ['PriorityClass'],
-  'API Extensions (apiextensions.k8s.io/v1)': ['CustomResourceDefinition'],
-  'Admission (admissionregistration.k8s.io/v1)': ['MutatingWebhookConfiguration', 'ValidatingWebhookConfiguration'],
-  'Certificates (certificates.k8s.io/v1)': ['CertificateSigningRequest'],
-  'Coordination (coordination.k8s.io/v1)': ['Lease'],
-  'Events (events.k8s.io/v1)': ['Event'],
-}
-
-const namespaces = ['default', 'kube-system', 'kube-public', 'kube-node-lease']
-
-const getRandomNamespace = () => namespaces[Math.floor(Math.random() * namespaces.length)]
-
-const fetchClusterData = async () => {
-  const mockData = {}
-  Object.entries(apiGroups).forEach(([group, resources]) => {
-    mockData[group] = resources.map(resource => ({
-      id: `${resource.toLowerCase()}-${Math.random().toString(36).substr(2, 9)}`,
-      type: resource,
-      name: `${resource.toLowerCase()}-example`,
-      apiGroup: group,
-      namespace: getRandomNamespace(),
-    }))
-  })
-  return mockData
-}
-
 const queryClient = new QueryClient()
 
 function DashboardContent() {
@@ -80,12 +36,46 @@ function DashboardContent() {
   const [isFullScreen, setIsFullScreen] = useState(false)
   const [selectedResources, setSelectedResources] = useState({})
   const [mounted, setMounted] = useState(false)
+  const [apiResources, setApiResources] = useState([])
+  const [quickAccessResources, setQuickAccessResources] = useState([])
+  const [showYaml, setShowYaml] = useState(false)
 
-  const { data: clusterData, isLoading, error } = useQuery({
-    queryKey: ['clusterData'],
-    queryFn: fetchClusterData,
-    refetchInterval: 5000,
+  const { data: resourceTypes, isLoading: isLoadingResources, error: resourceTypesError } = useQuery({
+    queryKey: ['resourceTypes'],
+    queryFn: async () => {
+      const response = await fetch('http://localhost:8080/')
+      if (!response.ok) {
+        throw new Error('Failed to fetch resource types')
+      }
+      return response.json()
+    },
   })
+
+  useEffect(() => {
+    if (resourceTypes) {
+      const commonResources = [
+        'pods', 'deployments', 'services', 'configmaps', 'secrets', 'ingresses',
+        'namespaces', 'persistentvolumeclaims', 'horizontalpodautoscalers', 'cronjobs'
+      ]
+
+      setQuickAccessResources(
+        resourceTypes.filter(type => commonResources.includes(type.toLowerCase()))
+      )
+
+      const groupedResources = {
+        'Core (v1)': resourceTypes.filter(type =>
+          ['pods', 'services', 'namespaces', 'configmaps', 'secrets'].includes(type.toLowerCase())
+        ),
+        'Apps': resourceTypes.filter(type =>
+          ['deployments', 'statefulsets', 'daemonsets'].includes(type.toLowerCase())
+        ),
+        'Other': resourceTypes.filter(type =>
+          !commonResources.includes(type.toLowerCase())
+        )
+      }
+      setApiResources(groupedResources)
+    }
+  }, [resourceTypes])
 
   useEffect(() => {
     setMounted(true)
@@ -112,33 +102,124 @@ function DashboardContent() {
   }
 
   const toggleResourceSelection = (resourceType: string) => {
-    setSelectedResources(prev => ({
-      ...prev,
-      [resourceType]: !prev[resourceType]
-    }))
+    console.log('Before toggle:', selectedResources)
+    setSelectedResources(prev => {
+      const newState = {
+        ...prev,
+        [resourceType]: !prev[resourceType]
+      }
+      console.log('After toggle:', newState)
+      return newState
+    })
   }
 
-  const handleResourceClick = (resource) => {
-    setSelectedResource(prev => prev && prev.id === resource.id ? null : resource)
+  const handleResourceClick = async (resource) => {
+    try {
+      const response = await fetch(`http://localhost:8080/details/${resource.type.toLowerCase()}/${resource.name}`)
+      if (!response.ok) {
+        throw new Error(`Failed to fetch details for ${resource.type}/${resource.name}`)
+      }
+      const details = await response.json()
+      setSelectedResource({
+        ...resource,
+        details
+      })
+    } catch (error) {
+      console.error('Error fetching resource details:', error)
+    }
   }
 
-  const filteredResources = clusterData
-    ? Object.values(clusterData).flat().filter(resource =>
-        resource.name.toLowerCase().includes(searchTerm.toLowerCase()) &&
-        selectedResources[resource.type]
+  const { data: resources, isLoading: isLoadingResourceList, error: resourcesError } = useQuery({
+    queryKey: ['resources', selectedResources],
+    queryFn: async () => {
+      const selectedTypes = Object.entries(selectedResources)
+        .filter(([_, isSelected]) => isSelected)
+        .map(([type]) => type)
+
+      console.log('Selected types:', selectedTypes)
+
+      if (selectedTypes.length === 0) return []
+
+      const results = []
+      for (const type of selectedTypes) {
+        try {
+          console.log(`Fetching ${type}...`)
+          const response = await fetch(`http://localhost:8080/list/${type.toLowerCase()}`)
+          if (!response.ok) {
+            throw new Error(`Failed to fetch ${type}`)
+          }
+          const names = await response.json()
+          console.log(`Response for ${type}:`, names)
+
+          const resources = names.map(name => ({
+            id: `${type}-${name}`,
+            type: type,
+            name: name,
+            namespace: 'default'
+          }))
+          results.push({ type, resources })
+        } catch (error) {
+          console.error(`Error fetching ${type}:`, error)
+        }
+      }
+      console.log('Final results:', results)
+      return results
+    },
+    enabled: Object.values(selectedResources).some(v => v)
+  })
+
+  const filteredResources = useMemo(() => {
+    console.log('Resources in memo:', resources)
+    if (!resources) return []
+
+    const result = resources
+      .flatMap(({ type, resources }) => resources)
+      .filter(resource =>
+        resource.name.toLowerCase().includes(searchTerm.toLowerCase())
       )
-    : []
+    console.log('Filtered resources:', result)
+    return result
+  }, [resources, searchTerm])
 
-  const namespaceColors = useMemo(() => {
-    const colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#FFA07A', '#98D8C8']
-    return namespaces.reduce((acc, namespace, index) => {
-      acc[namespace] = colors[index % colors.length]
-      return acc
-    }, {})
-  }, [])
+  const resourceTypeColors = useMemo(() => ({
+    pods: '#FF6B6B',         // Red
+    deployments: '#4ECDC4',  // Teal
+    services: '#45B7D1',     // Blue
+    configmaps: '#96CEB4',   // Sage Green
+    secrets: '#FFEEAD',      // Light Yellow
+    ingresses: '#D4A5A5',    // Dusty Rose
+    namespaces: '#9FA8DA',   // Light Purple
+    persistentvolumeclaims: '#FFD93D', // Yellow
+    horizontalpodautoscalers: '#95E1D3', // Mint
+    cronjobs: '#A8E6CF',     // Light Green
+    default: '#A9A9A9'       // Grey for any undefined types
+  }), [])
 
-  if (isLoading) return <div>Loading...</div>
-  if (error) return <div>Error: {error.message}</div>
+  const calculatePosition = (index: number, total: number) => {
+    const columns = 3
+    const row = Math.floor(index / columns)
+    const col = index % columns
+
+    const itemWidth = 25
+    const itemHeight = 15
+    const horizontalSpacing = 5
+    const verticalSpacing = 5
+
+    return {
+      left: `${col * (itemWidth + horizontalSpacing)}%`,
+      top: `${row * (itemHeight + verticalSpacing)}%`,
+      width: `${itemWidth}%`,
+      position: 'absolute' as const,
+    }
+  }
+
+  if (isLoadingResources) return <div>Loading resources...</div>
+  if (isLoadingResourceList) return <div>Loading resources...</div>
+  if (resourceTypesError) return <div>Error: {resourceTypesError.message}</div>
+  if (resourcesError) return <div>Error: {resourcesError.message}</div>
+
+  console.log('Selected Resources:', selectedResources)
+  console.log('Filtered Resources:', filteredResources)
 
   return (
     <div className={`flex h-screen ${mounted && theme === 'dark' ? 'dark' : ''}`}>
@@ -159,7 +240,10 @@ function DashboardContent() {
                   <Toggle
                     key={resource}
                     pressed={selectedResources[resource] || false}
-                    onPressedChange={() => toggleResourceSelection(resource)}
+                    onPressedChange={() => {
+                      console.log('Toggle pressed for:', resource)
+                      toggleResourceSelection(resource)
+                    }}
                   >
                     {resource}
                   </Toggle>
@@ -170,7 +254,7 @@ function DashboardContent() {
           <AccordionItem value="all-objects">
             <AccordionTrigger>All Objects</AccordionTrigger>
             <AccordionContent>
-              {Object.entries(apiGroups).map(([group, resources]) => (
+              {Object.entries(apiResources).map(([group, resources]) => (
                 <Accordion type="multiple" className="w-full" key={group}>
                   <AccordionItem value={group}>
                     <AccordionTrigger>{group}</AccordionTrigger>
@@ -213,9 +297,9 @@ function DashboardContent() {
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                <Button 
-                  variant="outline" 
-                  size="icon" 
+                <Button
+                  variant="outline"
+                  size="icon"
                   onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
                 >
                   <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
@@ -237,57 +321,106 @@ function DashboardContent() {
             }}
             className="w-full h-full bg-accent/20 rounded-md relative"
           >
-            {filteredResources.map((resource) => (
-              <motion.div
-                key={resource.id}
-                className="absolute p-2 rounded-md shadow-md cursor-pointer"
-                style={{
-                  left: `${Math.random() * 80}%`,
-                  top: `${Math.random() * 80}%`,
-                  backgroundColor: namespaceColors[resource.namespace],
-                }}
-                whileHover={{ scale: 1.05 }}
-                onClick={() => handleResourceClick(resource)}
-              >
-                <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger>{resource.name}</TooltipTrigger>
-                    <TooltipContent>
-                      <p>{resource.type}</p>
-                      <p>{resource.apiGroup}</p>
-                      <p>Namespace: {resource.namespace}</p>
-                    </TooltipContent>
-                  </Tooltip>
-                </TooltipProvider>
-              </motion.div>
-            ))}
+            {filteredResources.length === 0 ? (
+              <div>No resources found</div>
+            ) : (
+              filteredResources.map((resource, index) => (
+                <motion.div
+                  key={resource.id}
+                  layout
+                  initial={false}
+                  className="absolute p-2 rounded-md shadow-md cursor-pointer"
+                  style={{
+                    ...calculatePosition(index, filteredResources.length),
+                    backgroundColor: resourceTypeColors[resource.type.toLowerCase()] || resourceTypeColors.default,
+                  }}
+                  whileHover={{ scale: 1.05 }}
+                  onClick={() => handleResourceClick(resource)}
+                >
+                  <TooltipProvider>
+                    <Tooltip>
+                      <TooltipTrigger>
+                        <div className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: '100%' }}>
+                          {resource.name}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>{resource.type}</p>
+                        <p>Namespace: {resource.namespace}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                </motion.div>
+              ))
+            )}
           </motion.div>
         </div>
       </div>
       {selectedResource && (
-        <Card className="w-80 p-4 m-4 bg-card text-card-foreground">
+        <Card className="w-96 p-4 m-4 bg-card text-card-foreground">
           <CardHeader>
-            <CardTitle>{selectedResource.name}</CardTitle>
+            <CardTitle className="text-xl font-bold">{selectedResource.name}</CardTitle>
           </CardHeader>
           <CardContent>
-            <p>Type: {selectedResource.type}</p>
-            <p>API Group: {selectedResource.apiGroup}</p>
-            <p>Namespace: {selectedResource.namespace}</p>
-            <p>ID: {selectedResource.id}</p>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="mt-4">
-                  Actions <ChevronDown className="ml-2 h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-56">
-                <DropdownMenuLabel>Resource Actions</DropdownMenuLabel>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem>View YAML</DropdownMenuItem>
-                <DropdownMenuItem>Edit</DropdownMenuItem>
-                <DropdownMenuItem>Delete</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <div className="space-y-6">
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <span className="font-semibold">Type:</span>
+                  <span>{selectedResource.type}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="font-semibold">Namespace:</span>
+                  <span>{selectedResource.namespace}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="font-semibold">API Version:</span>
+                  <span>{selectedResource.details?.apiVersion}</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="font-semibold">Kind:</span>
+                  <span>{selectedResource.details?.kind}</span>
+                </div>
+              </div>
+
+              {selectedResource.details?.metadata?.labels && (
+                <div className="space-y-2">
+                  <h3 className="font-semibold">Labels:</h3>
+                  <div className="pl-4 space-y-1">
+                    {Object.entries(selectedResource.details.metadata.labels).map(([key, value]) => (
+                      <div key={key} className="flex items-center space-x-2">
+                        <span className="text-sm font-medium">{key}:</span>
+                        <span className="text-sm">{value}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={() => setShowYaml(!showYaml)}
+              >
+                {showYaml ? 'Hide YAML' : 'Show YAML'}
+              </Button>
+
+              {showYaml && (
+                <div className="mt-4">
+                  <pre className="bg-muted p-4 rounded-md overflow-x-auto text-sm font-mono whitespace-pre">
+                    <code>
+                      {JSON.stringify(selectedResource.details, null, 2)
+                        .split('\n')
+                        .map((line, i) => (
+                          <span key={i} className="block" style={{ color: line.includes('"') ? '#a6e22e' : '#f8f8f2' }}>
+                            {line}
+                          </span>
+                        ))
+                      }
+                    </code>
+                  </pre>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
