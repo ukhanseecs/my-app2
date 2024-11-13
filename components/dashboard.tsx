@@ -30,13 +30,13 @@ const queryClient = new QueryClient()
 
 function DashboardContent() {
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedResource, setSelectedResource] = useState(null)
+  const [selectedResource, setSelectedResource] = useState<{ type: string; name: string; namespace: string; details?: any } | null>(null)
   const [zoomLevel, setZoomLevel] = useState(1)
   const { theme, setTheme } = useTheme()
   const [isFullScreen, setIsFullScreen] = useState(false)
-  const [selectedResources, setSelectedResources] = useState({})
+  const [selectedResources, setSelectedResources] = useState<{ [key: string]: boolean }>({})
   const [mounted, setMounted] = useState(false)
-  const [apiResources, setApiResources] = useState([])
+  const [apiResources, setApiResources] = useState<{ [key: string]: string[] }>({})
   const [quickAccessResources, setQuickAccessResources] = useState([])
   const [showYaml, setShowYaml] = useState(false)
 
@@ -59,17 +59,17 @@ function DashboardContent() {
       ]
 
       setQuickAccessResources(
-        resourceTypes.filter(type => commonResources.includes(type.toLowerCase()))
+        resourceTypes.filter((type: string) => commonResources.includes(type.toLowerCase()))
       )
 
       const groupedResources = {
-        'Core (v1)': resourceTypes.filter(type =>
+        'Core (v1)': resourceTypes.filter((type: string) =>
           ['pods', 'services', 'namespaces', 'configmaps', 'secrets'].includes(type.toLowerCase())
         ),
-        'Apps': resourceTypes.filter(type =>
+        'Apps': resourceTypes.filter((type: string) =>
           ['deployments', 'statefulsets', 'daemonsets'].includes(type.toLowerCase())
         ),
-        'Other': resourceTypes.filter(type =>
+        'Other': resourceTypes.filter((type: string) =>
           !commonResources.includes(type.toLowerCase())
         )
       }
@@ -113,7 +113,7 @@ function DashboardContent() {
     })
   }
 
-  const handleResourceClick = async (resource) => {
+  const handleResourceClick = async (resource: { type: string; name: string; namespace: string }) => {
     try {
       const response = await fetch(`http://localhost:8080/details/${resource.type.toLowerCase()}/${resource.name}`)
       if (!response.ok) {
@@ -122,7 +122,8 @@ function DashboardContent() {
       const details = await response.json()
       setSelectedResource({
         ...resource,
-        details
+        details,
+        namespace: resource.namespace
       })
     } catch (error) {
       console.error('Error fetching resource details:', error)
@@ -151,7 +152,7 @@ function DashboardContent() {
           const names = await response.json()
           console.log(`Response for ${type}:`, names)
 
-          const resources = names.map(name => ({
+          const resources = names.map((name: string) => ({
             id: `${type}-${name}`,
             type: type,
             name: name,
@@ -332,7 +333,7 @@ function DashboardContent() {
                   className="absolute p-2 rounded-md shadow-md cursor-pointer"
                   style={{
                     ...calculatePosition(index, filteredResources.length),
-                    backgroundColor: resourceTypeColors[resource.type.toLowerCase()] || resourceTypeColors.default,
+                    backgroundColor: resourceTypeColors[resource.type.toLowerCase() as keyof typeof resourceTypeColors] || resourceTypeColors.default,
                   }}
                   whileHover={{ scale: 1.05 }}
                   onClick={() => handleResourceClick(resource)}
@@ -389,7 +390,7 @@ function DashboardContent() {
                     {Object.entries(selectedResource.details.metadata.labels).map(([key, value]) => (
                       <div key={key} className="flex items-center space-x-2">
                         <span className="text-sm font-medium">{key}:</span>
-                        <span className="text-sm">{value}</span>
+                        <span className="text-sm">{value as string | number | boolean | null | undefined}</span>
                       </div>
                     ))}
                   </div>
