@@ -1,8 +1,7 @@
 'use client'
 
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import { useTheme } from 'next-themes'
-import { Moon, Sun, ZoomIn, ZoomOut, Maximize2, ChevronDown } from 'lucide-react'
+import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
 import { motion } from 'framer-motion'
 import { useHotkeys } from 'react-hotkeys-hook'
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query'
@@ -17,22 +16,21 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
 
 const queryClient = new QueryClient()
 
+interface ResourceDetails {
+  apiVersion: string;
+  kind: string;
+  metadata: {
+    labels?: { [key: string]: string };
+  };
+}
+
 function DashboardContent() {
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedResource, setSelectedResource] = useState<{ type: string; name: string; namespace: string; details?: any } | null>(null)
+  const [selectedResource, setSelectedResource] = useState<{ type: string; name: string; namespace: string; details?: ResourceDetails } | null>(null)
   const [zoomLevel, setZoomLevel] = useState(1)
-  const { theme, setTheme } = useTheme()
   const [isFullScreen, setIsFullScreen] = useState(false)
   const [selectedResources, setSelectedResources] = useState<{ [key: string]: boolean }>({})
   const [mounted, setMounted] = useState(false)
@@ -54,23 +52,23 @@ function DashboardContent() {
   useEffect(() => {
     if (resourceTypes) {
       const commonResources = [
-        'pods', 'deployments', 'services', 'configmaps', 'secrets', 'ingresses',
-        'namespaces', 'persistentvolumeclaims', 'horizontalpodautoscalers', 'cronjobs'
+        'Pods', 'Deployments', 'Services', 'Configmaps', 'Secrets', 'Ingresses',
+        'Namespaces', 'Persistentvolumeclaims', 'Horizontalpodautoscalers', 'Cronjobs'
       ]
 
       setQuickAccessResources(
-        resourceTypes.filter((type: string) => commonResources.includes(type.toLowerCase()))
+        resourceTypes.filter((type: string) => commonResources.includes(type.charAt(0).toUpperCase() + type.slice(1).toLowerCase()))
       )
 
       const groupedResources = {
         'Core (v1)': resourceTypes.filter((type: string) =>
-          ['pods', 'services', 'namespaces', 'configmaps', 'secrets'].includes(type.toLowerCase())
+          ['Pods', 'Services', 'Namespaces', 'Configmaps', 'Secrets'].includes(type.charAt(0).toUpperCase() + type.slice(1).toLowerCase())
         ),
         'Apps': resourceTypes.filter((type: string) =>
-          ['deployments', 'statefulsets', 'daemonsets'].includes(type.toLowerCase())
+          ['Deployments', 'Statefulsets', 'Daemonsets'].includes(type.charAt(0).toUpperCase() + type.slice(1).toLowerCase())
         ),
         'Other': resourceTypes.filter((type: string) =>
-          !commonResources.includes(type.toLowerCase())
+          !commonResources.includes(type.charAt(0).toUpperCase() + type.slice(1).toLowerCase())
         )
       }
       setApiResources(groupedResources)
@@ -113,7 +111,12 @@ function DashboardContent() {
     })
   }
 
-  const handleResourceClick = async (resource: { type: string; name: string; namespace: string }) => {
+  const handleResourceClick = async (resource: { type: string; name: string; namespace: string; details?: ResourceDetails }) => {
+    if (selectedResource?.type === resource.type && selectedResource?.name === resource.name) {
+      setSelectedResource(null)
+      return
+    }
+
     try {
       const response = await fetch(`http://localhost:8080/details/${resource.type.toLowerCase()}/${resource.name}`)
       if (!response.ok) {
@@ -183,16 +186,25 @@ function DashboardContent() {
   }, [resources, searchTerm])
 
   const resourceTypeColors = useMemo(() => ({
-    pods: '#FF6B6B',         // Red
-    deployments: '#4ECDC4',  // Teal
-    services: '#45B7D1',     // Blue
-    configmaps: '#96CEB4',   // Sage Green
-    secrets: '#FFEEAD',      // Light Yellow
-    ingresses: '#D4A5A5',    // Dusty Rose
-    namespaces: '#9FA8DA',   // Light Purple
-    persistentvolumeclaims: '#FFD93D', // Yellow
-    horizontalpodautoscalers: '#95E1D3', // Mint
-    cronjobs: '#A8E6CF',     // Light Green
+    Pods: '#ADD8E6',         // Light Blue
+    Deployments: '#90EE90',  // Light Green
+    Services: '#87CEFA',     // Sky Blue
+    Configmaps: '#98FB98',   // Pale Green
+    Secrets: '#FFD700',      // Gold
+    Ingresses: '#FFA07A',    // Light Salmon
+    Namespaces: '#9370DB',   // Medium Purple
+    Persistentvolumeclaims: '#FFDAB9', // Peach Puff
+    Horizontalpodautoscalers: '#AFEEEE', // Pale Turquoise
+    Cronjobs: '#E6E6FA',     // Lavender
+    Statefulsets: '#FFB6C1', // Light Pink
+    Daemonsets: '#F0E68C',   // Khaki
+    Jobs: '#D8BFD8',         // Thistle
+    Configurations: '#B0E0E6', // Powder Blue
+    Servicesaccounts: '#FF6347', // Tomato
+    Nodes: '#4682B4',        // Steel Blue
+    Persistentvolumes: '#FFFACD', // Lemon Chiffon
+    Storageclasses: '#FFDEAD', // Navajo White
+    Endpoints: '#A52A2A',    // Brown
     default: '#A9A9A9'       // Grey for any undefined types
   }), [])
 
@@ -203,8 +215,8 @@ function DashboardContent() {
 
     const itemWidth = 25
     const itemHeight = 15
-    const horizontalSpacing = 5
-    const verticalSpacing = 5
+    const horizontalSpacing = 10  // Increase spacing for better separation
+    const verticalSpacing = 10    // Increase spacing for better separation
 
     return {
       left: `${col * (itemWidth + horizontalSpacing)}%`,
@@ -223,8 +235,8 @@ function DashboardContent() {
   console.log('Filtered Resources:', filteredResources)
 
   return (
-    <div className={`flex h-screen ${mounted && theme === 'dark' ? 'dark' : ''}`}>
-      <div className="w-64 p-4 border-r overflow-auto bg-background text-foreground">
+    <div className="flex h-screen">
+      <div className="w-64 p-4 border-r overflow-auto bg-background text-foreground" style={{ flexShrink: 0 }}>
         <Input
           type="search"
           placeholder="Search resources..."
@@ -232,21 +244,26 @@ function DashboardContent() {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="mb-4"
         />
-        <Accordion type="multiple" className="w-full">
+        <Accordion type="multiple" className="w-full" defaultValue={['quick-access', 'all-objects', 'Core (v1)', 'Apps', 'Other']}>
           <AccordionItem value="quick-access">
             <AccordionTrigger>Quick Access</AccordionTrigger>
             <AccordionContent>
               <div className="space-y-2">
                 {quickAccessResources.map(resource => (
                   <Toggle
-                    key={resource}
+                    key={resource.charAt(0).toUpperCase() + resource.slice(1)}
                     pressed={selectedResources[resource] || false}
                     onPressedChange={() => {
                       console.log('Toggle pressed for:', resource)
                       toggleResourceSelection(resource)
                     }}
+                    className={
+                      selectedResources[resource]
+                        ? 'bg-light-blue-700 text-white'  // Active state
+                        : 'bg-light-blue-200 text-black hover:bg-light-blue-400' // Inactive state
+                    }
                   >
-                    {resource}
+                    {resource.charAt(0).toUpperCase() + resource.slice(1)}
                   </Toggle>
                 ))}
               </div>
@@ -256,18 +273,23 @@ function DashboardContent() {
             <AccordionTrigger>All Objects</AccordionTrigger>
             <AccordionContent>
               {Object.entries(apiResources).map(([group, resources]) => (
-                <Accordion type="multiple" className="w-full" key={group}>
+                <Accordion type="multiple" className="w-full" key={group} defaultValue={[group]}>
                   <AccordionItem value={group}>
                     <AccordionTrigger>{group}</AccordionTrigger>
                     <AccordionContent>
-                      <div className="space-y-2">
+                      <div className="space-y-2 overflow-y-auto max-h-40">
                         {resources.map(resource => (
                           <Toggle
                             key={resource}
                             pressed={selectedResources[resource] || false}
                             onPressedChange={() => toggleResourceSelection(resource)}
+                            className={
+                              selectedResources[resource]
+                                ? 'bg-light-green-700 text-white'  // Active state
+                                : 'bg-light-green-200 text-black hover:bg-light-green-400' // Inactive state
+                            }
                           >
-                            {resource}
+                            {resource.charAt(0).toUpperCase() + resource.slice(1)}
                           </Toggle>
                         ))}
                       </div>
@@ -295,75 +317,62 @@ function DashboardContent() {
               {isFullScreen ? 'Exit Full Screen' : 'Full Screen'}
             </Button>
           </div>
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
-                >
-                  <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-                  <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-                  <span className="sr-only">Toggle theme</span>
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Toggle dark mode</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
         </div>
-        <div className="border rounded-lg p-4 h-[calc(100vh-12rem)] overflow-hidden">
+        <div className="border rounded-lg p-4 h-[calc(100vh-12rem)] overflow-auto max-w-full">
           <motion.div
             style={{
               scale: zoomLevel,
               transition: 'scale 0.2s',
+              maxWidth: '100%',
             }}
-            className="w-full h-full bg-accent/20 rounded-md relative"
+            className="w-full h-full bg-accent/20 rounded-md relative overflow-auto"
           >
             {filteredResources.length === 0 ? (
               <div>No resources found</div>
             ) : (
-              filteredResources.map((resource, index) => (
-                <motion.div
-                  key={resource.id}
-                  layout
-                  initial={false}
-                  className="absolute p-2 rounded-md shadow-md cursor-pointer"
-                  style={{
-                    ...calculatePosition(index, filteredResources.length),
-                    backgroundColor: resourceTypeColors[resource.type.toLowerCase() as keyof typeof resourceTypeColors] || resourceTypeColors.default,
-                  }}
-                  whileHover={{ scale: 1.05 }}
-                  onClick={() => handleResourceClick(resource)}
-                >
-                  <TooltipProvider>
-                    <Tooltip>
-                      <TooltipTrigger>
-                        <div className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: '100%' }}>
-                          {resource.name}
-                        </div>
-                      </TooltipTrigger>
-                      <TooltipContent>
-                        <p>{resource.type}</p>
-                        <p>Namespace: {resource.namespace}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  </TooltipProvider>
-                </motion.div>
-              ))
+              <div className="grid grid-cols-3 gap-6 overflow-y-scroll max-h-[70vh]">
+                {filteredResources.map((resource, index) => (
+                  <motion.div
+                    key={`${resource.type}-${resource.name}`}
+                    layout
+                    initial={false}
+                    className="p-2 rounded-md shadow-md cursor-pointer flex flex-col items-start"
+                    style={{
+                      backgroundColor: resourceTypeColors[resource.type.charAt(0).toUpperCase() + resource.type.slice(1).toLowerCase() as keyof typeof resourceTypeColors] || resourceTypeColors.default,
+                      boxShadow: selectedResource?.type === resource.type && selectedResource?.name === resource.name ? '0px 0px 10px #000' : 'none',
+                    }}
+                    whileHover={{ scale: 1.05 }}
+                    onClick={() => handleResourceClick(resource)}
+                  >
+                    <TooltipProvider>
+                      <Tooltip>
+                        <TooltipTrigger>
+                          <div className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: '100%' }}>
+                            {resource.name}
+                          </div>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <p>{resource.type}</p>
+                          <p>Namespace: {resource.namespace}</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                    <div className="text-xs mt-2 px-2 py-1 bg-gray-200 rounded-md">Type: {resource.type}</div>
+                    <div className="text-xs mt-1 px-2 py-1 bg-gray-200 rounded-md">Namespace: {resource.namespace}</div>
+                  </motion.div>
+                ))}
+              </div>
             )}
           </motion.div>
         </div>
       </div>
       {selectedResource && (
-        <Card className="w-96 p-4 m-4 bg-card text-card-foreground">
+        <Card className="flex-1 p-4 m-4 bg-card text-card-foreground h-[calc(100vh-3rem)]" style={{ overflowWrap: 'break-word', wordWrap: 'break-word', maxWidth: '50%' }}>
           <CardHeader>
             <CardTitle className="text-xl font-bold">{selectedResource.name}</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="space-y-6">
+            <div className="space-y-6 h-full flex flex-col">
               <div className="space-y-2">
                 <div className="flex items-center space-x-2">
                   <span className="font-semibold">Type:</span>
@@ -406,13 +415,13 @@ function DashboardContent() {
               </Button>
 
               {showYaml && (
-                <div className="mt-4">
-                  <pre className="bg-muted p-4 rounded-md overflow-x-auto text-sm font-mono whitespace-pre">
+                <div className="mt-4 flex-1 overflow-y-auto max-h-80 scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-indigo-600">
+                  <pre className="bg-gray-900 p-4 rounded-md overflow-x-auto text-sm font-mono text-green-400" style={{ whiteSpace: 'pre-wrap', wordWrap: 'break-word', lineHeight: '1.5', maxWidth: '100%' }}>
                     <code>
                       {JSON.stringify(selectedResource.details, null, 2)
                         .split('\n')
                         .map((line, i) => (
-                          <span key={i} className="block" style={{ color: line.includes('"') ? '#a6e22e' : '#f8f8f2' }}>
+                          <span key={i} className="block" style={{ color: line.includes('"') ? '#32CD32' : '#ADFF2F' }}>
                             {line}
                           </span>
                         ))
