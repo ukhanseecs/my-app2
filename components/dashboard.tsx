@@ -253,7 +253,7 @@ function DashboardContent() {
                   <Toggle
                     key={resource.charAt(0).toUpperCase() + resource.slice(1)}
                     pressed={selectedResources[resource] || false}
-                    onPressedChange={() => {
+                    onPressedChange={() => { 
                       console.log('Toggle pressed for:', resource)
                       toggleResourceSelection(resource)
                     }}
