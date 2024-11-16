@@ -1,4 +1,3 @@
-
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { ZoomIn, ZoomOut, Maximize2 } from 'lucide-react'
 import { motion } from 'framer-motion'
@@ -8,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ResourceList } from './ResourceList'
 import { ResourceDetails } from './ResourceDetails'
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from '@/components/ui/tooltip'
 
 function DashboardContent() {
   const [searchTerm, setSearchTerm] = useState('')
@@ -203,91 +203,102 @@ function DashboardContent() {
     }
   }
 
-  if (isLoadingResources) return <div>Loading resources...</div>
-  if (isLoadingResourceList) return <div>Loading resources...</div>
+  if (isLoadingResources || isLoadingResourceList) return <div>Loading resources...</div>
   if (resourceTypesError) return <div>Error: {resourceTypesError.message}</div>
   if (resourcesError) return <div>Error: {resourcesError.message}</div>
 
   return (
-    <div className="flex h-screen">
-      <div className="w-64 p-4 border-r overflow-auto bg-background text-foreground" style={{ flexShrink: 0 }}>
-        <Input
-          type="search"
-          placeholder="Search resources..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="mb-4"
-        />
-        <ResourceList
-          quickAccessResources={quickAccessResources}
-          apiResources={apiResources}
-          selectedResources={selectedResources}
-          toggleResourceSelection={toggleResourceSelection}
-        />
-      </div>
-      <div className="flex-1 p-4 overflow-hidden bg-background text-foreground">
-        <div className="flex justify-between mb-4">
-          <div>
-            <Button onClick={() => handleZoom(0.1)} className="mr-2">
-              <ZoomIn className="w-4 h-4" />
-            </Button>
-            <Button onClick={() => handleZoom(-0.1)} className="mr-2">
-              <ZoomOut className="w-4 h-4" />
-            </Button>
-            <Button onClick={() => setZoomLevel(1)} className="mr-2">
-              <Maximize2 className="w-4 h-4" />
-            </Button>
-            <Button onClick={toggleFullScreen}>
-              {isFullScreen ? 'Exit Full Screen' : 'Full Screen'}
-            </Button>
+    <TooltipProvider>
+      <div className="flex h-screen">
+        <div className="w-64 p-4 border-r overflow-auto bg-background text-foreground" style={{ flexShrink: 0 }}>
+          <Input
+            type="search"
+            placeholder="Search resources..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="mb-4"
+          />
+          <ResourceList
+            quickAccessResources={quickAccessResources}
+            apiResources={apiResources}
+            selectedResources={selectedResources}
+            toggleResourceSelection={toggleResourceSelection}
+          />
+        </div>
+        <div className="flex-1 p-4 overflow-hidden bg-background text-foreground">
+          <div className="flex justify-between mb-4">
+            <div>
+              <Button onClick={() => handleZoom(0.1)} className="mr-2">
+                <ZoomIn className="w-4 h-4" />
+              </Button>
+              <Button onClick={() => handleZoom(-0.1)} className="mr-2">
+                <ZoomOut className="w-4 h-4" />
+              </Button>
+              <Button onClick={() => setZoomLevel(1)} className="mr-2">
+                <Maximize2 className="w-4 h-4" />
+              </Button>
+              <Button onClick={toggleFullScreen}>
+                {isFullScreen ? 'Exit Full Screen' : 'Full Screen'}
+              </Button>
+            </div>
+          </div>
+          <div className="border rounded-lg p-4 h-[calc(100vh-12rem)] overflow-auto max-w-full">
+            <motion.div
+              style={{
+                scale: zoomLevel,
+                transition: 'scale 0.2s',
+                maxWidth: '100%',
+              }}
+              className="w-full h-full bg-accent/20 rounded-md relative overflow-auto"
+            >
+              {filteredResources.length === 0 ? (
+                <div>No resources found</div>
+              ) : (
+                <div className="grid grid-cols-3 gap-6 overflow-y-scroll max-h-[70vh]">
+                  {filteredResources.map((resource, index) => (
+                    <Tooltip key={`${resource.type}-${resource.name}`}>
+                      <TooltipTrigger asChild>
+                        <motion.div
+                          layout
+                          initial={false}
+                          className="p-2 rounded-md shadow-md cursor-pointer flex flex-col items-start"
+                          style={{
+                            backgroundColor: resourceTypeColors[resource.type.charAt(0).toUpperCase() + resource.type.slice(1).toLowerCase() as keyof typeof resourceTypeColors] || resourceTypeColors.default,
+                            boxShadow: selectedResource?.type === resource.type && selectedResource?.name === resource.name ? '0px 0px 10px #000' : 'none',
+                          }}
+                          whileHover={{ scale: 1.05 }}
+                          onClick={() => handleResourceClick(resource)}
+                        >
+                          <div className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: '100%' }}>
+                            {resource.name}
+                          </div>
+                          <div className="text-xs mt-2 px-2 py-1 bg-gray-200 rounded-md">Type: {resource.type}</div>
+                          <div className="text-xs mt-1 px-2 py-1 bg-gray-200 rounded-md">Namespace: {resource.namespace}</div>
+                        </motion.div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div>
+                          <div><strong>Type:</strong> {resource.type}</div>
+                          <div><strong>Namespace:</strong> {resource.namespace}</div>
+                          <div><strong>Name:</strong> {resource.name}</div>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+              )}
+            </motion.div>
           </div>
         </div>
-        <div className="border rounded-lg p-4 h-[calc(100vh-12rem)] overflow-auto max-w-full">
-          <motion.div
-            style={{
-              scale: zoomLevel,
-              transition: 'scale 0.2s',
-              maxWidth: '100%',
-            }}
-            className="w-full h-full bg-accent/20 rounded-md relative overflow-auto"
-          >
-            {filteredResources.length === 0 ? (
-              <div>No resources found</div>
-            ) : (
-              <div className="grid grid-cols-3 gap-6 overflow-y-scroll max-h-[70vh]">
-                {filteredResources.map((resource, index) => (
-                  <motion.div
-                    key={`${resource.type}-${resource.name}`}
-                    layout
-                    initial={false}
-                    className="p-2 rounded-md shadow-md cursor-pointer flex flex-col items-start"
-                    style={{
-                      backgroundColor: resourceTypeColors[resource.type.charAt(0).toUpperCase() + resource.type.slice(1).toLowerCase() as keyof typeof resourceTypeColors] || resourceTypeColors.default,
-                      boxShadow: selectedResource?.type === resource.type && selectedResource?.name === resource.name ? '0px 0px 10px #000' : 'none',
-                    }}
-                    whileHover={{ scale: 1.05 }}
-                    onClick={() => handleResourceClick(resource)}
-                  >
-                    <div className="whitespace-nowrap overflow-hidden text-ellipsis" style={{ maxWidth: '100%' }}>
-                      {resource.name}
-                    </div>
-                    <div className="text-xs mt-2 px-2 py-1 bg-gray-200 rounded-md">Type: {resource.type}</div>
-                    <div className="text-xs mt-1 px-2 py-1 bg-gray-200 rounded-md">Namespace: {resource.namespace}</div>
-                  </motion.div>
-                ))}
-              </div>
-            )}
-          </motion.div>
-        </div>
+        {selectedResource && (
+          <ResourceDetails
+            selectedResource={selectedResource}
+            showYaml={showYaml}
+            setShowYaml={setShowYaml}
+          />
+        )}
       </div>
-      {selectedResource && (
-        <ResourceDetails
-          selectedResource={selectedResource}
-          showYaml={showYaml}
-          setShowYaml={setShowYaml}
-        />
-      )}
-    </div>
+    </TooltipProvider>
   )
 }
 
