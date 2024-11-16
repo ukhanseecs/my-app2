@@ -57,18 +57,18 @@ function DashboardContent() {
       ]
 
       setQuickAccessResources(
-        resourceTypes.filter((type: string) => commonResources.includes(type.charAt(0).toUpperCase() + type.slice(1).toLowerCase()))
+        resourceTypes.filter((type: string) => commonResources.includes(type))
       )
 
       const groupedResources = {
         'Core (v1)': resourceTypes.filter((type: string) =>
-          ['Pods', 'Services', 'Namespaces', 'Configmaps', 'Secrets'].includes(type.charAt(0).toUpperCase() + type.slice(1).toLowerCase())
+          ['Pods', 'Services', 'Namespaces', 'Configmaps', 'Secrets'].includes(type)
         ),
         'Apps': resourceTypes.filter((type: string) =>
-          ['Deployments', 'Statefulsets', 'Daemonsets'].includes(type.charAt(0).toUpperCase() + type.slice(1).toLowerCase())
+          ['Deployments', 'Statefulsets', 'Daemonsets'].includes(type)
         ),
         'Other': resourceTypes.filter((type: string) =>
-          !commonResources.includes(type.charAt(0).toUpperCase() + type.slice(1).toLowerCase())
+          !commonResources.includes(type)
         )
       }
       setApiResources(groupedResources)
@@ -251,7 +251,7 @@ function DashboardContent() {
               <div className="space-y-2">
                 {quickAccessResources.map(resource => (
                   <Toggle
-                    key={resource.charAt(0).toUpperCase() + resource.slice(1)}
+                    key={resource}
                     pressed={selectedResources[resource] || false}
                     onPressedChange={() => {
                       console.log('Toggle pressed for:', resource)
@@ -263,7 +263,7 @@ function DashboardContent() {
                         : 'bg-light-blue-200 text-black hover:bg-light-blue-400' // Inactive state
                     }
                   >
-                    {resource.charAt(0).toUpperCase() + resource.slice(1)}
+                    {resource}
                   </Toggle>
                 ))}
               </div>
@@ -289,7 +289,7 @@ function DashboardContent() {
                                 : 'bg-light-green-200 text-black hover:bg-light-green-400' // Inactive state
                             }
                           >
-                            {resource.charAt(0).toUpperCase() + resource.slice(1)}
+                            {resource}
                           </Toggle>
                         ))}
                       </div>
@@ -338,7 +338,7 @@ function DashboardContent() {
                     initial={false}
                     className="p-2 rounded-md shadow-md cursor-pointer flex flex-col items-start"
                     style={{
-                      backgroundColor: resourceTypeColors[resource.type.charAt(0).toUpperCase() + resource.type.slice(1).toLowerCase() as keyof typeof resourceTypeColors] || resourceTypeColors.default,
+                      backgroundColor: resourceTypeColors[resource.type as keyof typeof resourceTypeColors] || resourceTypeColors.default,
                       boxShadow: selectedResource?.type === resource.type && selectedResource?.name === resource.name ? '0px 0px 10px #000' : 'none',
                     }}
                     whileHover={{ scale: 1.05 }}
