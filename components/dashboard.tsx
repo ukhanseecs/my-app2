@@ -406,13 +406,21 @@ function DashboardContent() {
                 </div>
               )}
 
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={() => setShowYaml(!showYaml)}
-              >
-                {showYaml ? 'Hide YAML' : 'Show YAML'}
-              </Button>
+              <div className="flex space-x-2">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setShowYaml(!showYaml)}
+                >
+                  {showYaml ? 'Hide YAML' : 'Show YAML'}
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={() => navigator.clipboard.writeText(JSON.stringify(selectedResource.details, null, 2))}
+                >
+                  Copy YAML to Clipboard
+                </Button>
+              </div>
 
               {showYaml && (
                 <div className="mt-4 flex-1 overflow-y-auto max-h-80 scrollbar-thin scrollbar-thumb-rounded scrollbar-thumb-indigo-600">
